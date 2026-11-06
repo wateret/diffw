@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ldiff</title>
+<style>
+:root {
+  --bg: #eceff3; --surface: #ffffff; --surface-2: #f6f8fa; --ink: #1b2330; --muted: #657084; --faint: #98a2b3;
+  --line: #d8dee6; --line-soft: #e7ebf0; --accent: #3b4bdb; --accent-soft: #e6e9fd;
+  --add-bg: #e8f7ee; --add-gut: #d2eedd; --add-word: #aee3c4; --add-ink: #14804a;
+  --del-bg: #fdeeed; --del-gut: #f9d9d6; --del-word: #f4bbb6; --del-ink: #c0392f;
+  --ctx-gut: #f6f8fa; --hunk-bg: #eef1fb; --hunk-ink: #4b5aa8; --focus: #fff4c2;
+  --s-kw: #8250df; --s-str: #b45309; --s-num: #0b7285; --s-com: #8a94a6; --s-fn: #2f55d4; --s-type: #a0388f;
+  --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --head-h: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101319; --surface: #171b23; --surface-2: #1c212b; --ink: #e5e9f0; --muted: #98a2b3; --faint: #5d6778;
+    --line: #2a313d; --line-soft: #222834; --accent: #8e9aff; --accent-soft: #23294d;
+    --add-bg: #12301f; --add-gut: #17402a; --add-word: #1f6a41; --add-ink: #4cd08a;
+    --del-bg: #371a1c; --del-gut: #4a2124; --del-word: #7a2f33; --del-ink: #ff857b;
+    --ctx-gut: #1c212b; --hunk-bg: #1d2238; --hunk-ink: #93a0ec; --focus: #4a4217;
+    --s-kw: #c4a2ff; --s-str: #f0b36a; --s-num: #5ccbe0; --s-com: #6f7a8d; --s-fn: #8fb0ff; --s-type: #ee9be0;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--head-h) + 56px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 30; height: var(--head-h); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 20px; padding: 0 24px; }
+.brand { font: 700 17px/1 var(--mono); letter-spacing: -0.02em; display: flex; align-items: baseline; gap: 1px; }
+.brand i { font-style: normal; color: var(--add-ink); }
+.brand u { text-decoration: none; color: var(--del-ink); }
+.cmd { font: 12.5px var(--mono); color: var(--muted); min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd b { color: var(--ink); font-weight: 500; }
+.tot { font: 600 13px var(--mono); white-space: nowrap; }
+.tot .a { color: var(--add-ink); } .tot .d { color: var(--del-ink); margin-left: 8px; } .tot .f { color: var(--muted); font-weight: 400; margin-right: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+
+/* layout */
+.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 28px; max-width: 1760px; margin: 0 auto; padding: 24px 24px 120px; align-items: start; }
+.side { position: sticky; top: calc(var(--head-h) + 24px); max-height: calc(100vh - var(--head-h) - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.filter { border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 12px 14px; outline: none; font-size: 13px; }
+.filter:focus-visible { box-shadow: inset 0 -2px 0 var(--accent); }
+.filter::placeholder { color: var(--faint); }
+.files { overflow: auto; padding: 6px; margin: 0; list-style: none; }
+.files a { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 6px 8px; border-radius: 7px; color: inherit; text-decoration: none; font: 12.5px/1.3 var(--mono); }
+.files a:hover { background: var(--surface-2); }
+.files a.cur { background: var(--accent-soft); }
+.files .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.files .nm span { direction: ltr; unicode-bidi: plaintext; }
+.files .dir { color: var(--faint); } .files .base { font-weight: 600; }
+.files li.viewed .nm { opacity: .45; text-decoration: line-through; text-decoration-color: var(--faint); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dot.added { background: var(--add-ink); } .dot.deleted { background: var(--del-ink); } .dot.renamed { background: var(--s-kw); }
+.pips { display: inline-grid; grid-auto-flow: column; gap: 2px; }
+.pips i { width: 6px; height: 6px; border-radius: 1px; background: var(--line); }
+.pips i.a { background: var(--add-ink); } .pips i.d { background: var(--del-ink); }
+.prog { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.keys { color: var(--faint); }
+kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--surface-2); }
+
+/* commit + strip */
+.commit { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px 28px; margin-bottom: 16px; }
+.commit h2 { font: 600 26px/1.25 var(--serif); letter-spacing: -0.01em; margin: 0; max-width: 60ch; text-wrap: balance; }
+.commit .body { margin: 12px 0 0; max-width: 78ch; color: var(--muted); white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
+.commit .meta { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+.commit .meta b { color: var(--ink); font-weight: 600; }
+.commit .sha { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; color: var(--ink); }
+.strip { display: flex; gap: 3px; height: 12px; margin: 0 0 16px; padding: 0 2px; }
+.strip a { min-width: 6px; border-radius: 3px; transition: opacity .15s, transform .15s; }
+.strip a:hover { transform: scaleY(1.7); }
+.strip a.viewed { opacity: .25; }
+
+/* file card */
+.file { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 16px; }
+.fhead { position: sticky; top: var(--head-h); z-index: 10; display: flex; align-items: center; gap: 12px; padding: 9px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; }
+.file.closed .fhead { border-bottom-color: transparent; border-radius: 12px; }
+.chev { border: 0; background: none; width: 24px; height: 24px; padding: 0; border-radius: 6px; color: var(--muted); display: grid; place-items: center; }
+.chev:hover { background: var(--line-soft); }
+.chev svg { transition: transform .15s; } .file.closed .chev svg { transform: rotate(-90deg); }
+.fpath { font: 13px var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpath .dir { color: var(--faint); } .fpath b { font-weight: 600; } .fpath .arrow { color: var(--faint); margin: 0 6px; }
+.tag { font: 600 11px var(--sans); padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.added { background: var(--add-bg); color: var(--add-ink); } .tag.deleted { background: var(--del-bg); color: var(--del-ink); }
+.fstat { margin-left: auto; font: 600 12px var(--mono); white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+.fstat .a { color: var(--add-ink); } .fstat .d { color: var(--del-ink); }
+.viewed-l { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); user-select: none; cursor: pointer; padding: 3px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.viewed-l:has(input:checked) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.viewed-l input { accent-color: var(--accent); margin: 0; }
+.file.closed .fbody { display: none; }
+.note { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
+.note button { margin-top: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; }
+.note button:hover { border-color: var(--accent); color: var(--accent); }
+.modes { padding: 8px 14px; font: 12px var(--mono); color: var(--muted); border-bottom: 1px solid var(--line-soft); }
+
+/* diff table */
+table.d { width: 100%; border-collapse: collapse; table-layout: fixed; font: 12.5px/20px var(--mono); }
+table.u col.n { width: 54px; } table.s col.n { width: 54px; }
+table.d td { padding: 0; vertical-align: top; }
+td.ln { text-align: right; padding: 0 10px; color: var(--faint); background: var(--ctx-gut); user-select: none; cursor: pointer; font-size: 12px; }
+td.ln:hover { color: var(--accent); }
+td.c { padding: 0 12px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+td.c .sg { display: inline-block; width: 1.4ch; margin-left: -1.4ch; color: var(--faint); user-select: none; }
+table.u td.c, table.s td.c { padding-left: calc(10px + 1.4ch); }
+tr.add td.c, td.c.add { background: var(--add-bg); } tr.add td.ln, td.ln.add { background: var(--add-gut); color: var(--add-ink); }
+tr.del td.c, td.c.del { background: var(--del-bg); } tr.del td.ln, td.ln.del { background: var(--del-gut); color: var(--del-ink); }
+td.c.add .sg, tr.add .sg { color: var(--add-ink); } td.c.del .sg, tr.del .sg { color: var(--del-ink); }
+td.c.void, td.ln.void { background: var(--surface-2); }
+table.s td.c.add + td.ln, table.s td.c.del + td.ln { border-left: 0; }
+table.s td.ln:nth-child(3) { border-left: 1px solid var(--line); }
+mark { color: inherit; border-radius: 3px; padding: 1px 0; }
+.add mark { background: var(--add-word); } .del mark { background: var(--del-word); }
+tr.hunk td { background: var(--hunk-bg); color: var(--hunk-ink); padding: 3px 12px; font-size: 12px; }
+tr.hunk td.ln { cursor: default; text-align: center; letter-spacing: .1em; }
+tr.hunk .rg { font-weight: 600; margin-right: 12px; } tr.hunk .cx { opacity: .85; }
+tr.nonl td.c { color: var(--faint); font-style: italic; }
+tr:target td, tr:target td.ln { background: var(--focus) !important; }
+table.s.selL td:nth-child(4), table.s.selL td:nth-child(3) { user-select: none; }
+table.s.selR td:nth-child(2), table.s.selR td:nth-child(1) { user-select: none; }
+.k { color: var(--s-kw); } .st { color: var(--s-str); } .nu { color: var(--s-num); } .cm { color: var(--s-com); font-style: italic; } .fn { color: var(--s-fn); } .ty { color: var(--s-type); }
+pre.raw { margin: 0; padding: 20px; overflow: auto; font: 12.5px/1.5 var(--mono); }
+.empty { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px; }
+.empty h2 { margin: 0 0 6px; font: 600 18px var(--serif); } .empty p { margin: 0 0 16px; color: var(--muted); }
+
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; padding: 16px; } .side { display: none; }
+  .top { padding: 0 16px; gap: 12px; } .cmd { display: none; } .tot { margin-left: auto; }
+  .commit { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const DATA = /*__DATA__*/null;
+
+/* ───────────── parser ───────────── */
+function parseDiff(text) {
+  const L = text.replace(/\r\n/g, '\n').split('\n');
+  const groups = [];
+  let g = null, f = null, h = null, oldLeft = 0, newLeft = 0;
+  const grp = () => g || (g = { commit: null, files: [] }, groups.push(g), g);
+  const stripPath = (p) => { p = p.replace(/\t.*$/, '').replace(/^"|"$/g, ''); return p; };
+  const newFile = (a, b) => { f = { a, b, status: 'modified', hunks: [], adds: 0, dels: 0, binary: false, notes: [], hasMinus: false, raw: null }; grp().files.push(f); h = null; };
+
+  for (let i = 0; i < L.length; i++) {
+    const line = L[i];
+    if (h && (oldLeft > 0 || newLeft > 0 || line[0] === '\\')) {
+      const c = line[0];
+      if (c === '\\') { h.lines.push({ t: 'meta', s: line.slice(2) }); continue; }
+      if (c === '+') { h.lines.push({ t: 'add', n: h.n++, s: line.slice(1) }); newLeft--; f.adds++; }
+      else if (c === '-') { h.lines.push({ t: 'del', o: h.o++, s: line.slice(1) }); oldLeft--; f.dels++; }
+      else { h.lines.push({ t: 'ctx', o: h.o++, n: h.n++, s: line.slice(1) }); oldLeft--; newLeft--; }
+      continue;
+    }
+    h = null;
+    let m;
+    if ((m = /^commit ([0-9a-f]{7,40})(?: \((.*)\))?/.exec(line))) {
+      g = { commit: { sha: m[1], refs: m[2] || '', author: '', date: '', merge: '', msg: [] }, files: [] }; groups.push(g); f = null;
+      while (++i < L.length && L[i] !== '') {
+        const k = /^(Author|Date|Merge|Commit|AuthorDate|CommitDate):\s*(.*)$/.exec(L[i]);
+        if (k) { const key = k[1].toLowerCase(); if (key === 'author') g.commit.author = k[2]; else if (key === 'date' || key === 'authordate') g.commit.date = g.commit.date || k[2]; else if (key === 'merge') g.commit.merge = k[2]; }
+      }
+      while (i + 1 < L.length && /^( {4}|$)/.test(L[i + 1]) && !(L[i + 1] === '' && !/^ {4}/.test(L[i + 2] || '') )) { i++; g.commit.msg.push(L[i].slice(4)); }
+      continue;
+    }
+    if ((m = /^diff --git (.+)$/.exec(line))) {
+      let a = '', b = '';
+      const q = /^"?a\/(.*?)"? "?b\/(.*?)"?$/.exec(m[1]);
+      if (q) { a = q[1]; b = q[2]; } else { const half = m[1].split(' '); a = half[0].replace(/^a\//, ''); b = half[half.length - 1].replace(/^b\//, ''); }
+      newFile(a, b); continue;
+    }
+    if (/^diff --(cc|combined) /.test(line)) { newFile('', line.replace(/^diff --\w+ /, '')); f.raw = []; f.notes.push('Combined diff (merge) — shown as plain text'); continue; }
+    if (f && f.raw) { f.raw.push(line); continue; }
+    if (f && !f.hasMinus && f.hunks.length === 0) {
+      if ((m = /^new file mode (\d+)/.exec(line))) { f.status = 'added'; continue; }
+      if ((m = /^deleted file mode (\d+)/.exec(line))) { f.status = 'deleted'; continue; }
+      if ((m = /^old mode (\d+)/.exec(line))) { f.oldMode = m[1]; continue; }
+      if ((m = /^new mode (\d+)/.exec(line))) { f.notes.push(`mode ${f.oldMode || '?'} → ${m[1]}`); continue; }
+      if ((m = /^rename from (.*)/.exec(line))) { f.status = 'renamed'; f.a = m[1]; continue; }
+      if ((m = /^rename to (.*)/.exec(line))) { f.b = m[1]; continue; }
+      if ((m = /^copy from (.*)/.exec(line))) { f.status = 'renamed'; f.a = m[1]; f.notes.push('copied'); continue; }
+      if ((m = /^copy to (.*)/.exec(line))) { f.b = m[1]; continue; }
+      if ((m = /^similarity index (\d+)%/.exec(line))) { f.notes.push(`${m[1]}% similar`); continue; }
+      if (/^Binary files .* differ$/.test(line) || /^GIT binary patch/.test(line)) { f.binary = true; continue; }
+    }
+    if (/^--- /.test(line) && /^\+\+\+ /.test(L[i + 1] || '')) {
+      const pa = stripPath(line.slice(4)), pb = stripPath(L[i + 1].slice(4));
+      if (!f || f.hunks.length || f.hasMinus) newFile('', '');
+      f.hasMinus = true;
+      if (pa === '/dev/null') { f.status = 'added'; } else f.a = pa.replace(/^a\//, '');
+      if (pb === '/dev/null') { f.status = 'deleted'; } else f.b = pb.replace(/^b\//, '');
+      if (!f.a) f.a = f.b; if (!f.b) f.b = f.a;
+      i++; continue;
+    }
+    if ((m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/.exec(line)) && f) {
+      oldLeft = m[2] === undefined ? 1 : +m[2]; newLeft = m[4] === undefined ? 1 : +m[4];
+      h = { o: +m[1], n: +m[3], oStart: +m[1], nStart: +m[3], oLen: oldLeft, nLen: newLeft, ctx: m[5], lines: [] };
+      f.hunks.push(h); continue;
+    }
+  }
+  groups.forEach((x) => x.files.forEach((fl) => { fl.path = fl.status === 'deleted' ? fl.a : fl.b || fl.a; }));
+  return groups.filter((x) => x.commit || x.files.length);
+}
+
+/* ───────────── syntax highlighting (single line, regex) ───────────── */
+const KW = {
+  js: 'async await break case catch class const continue debugger default delete do else enum export extends finally for from function if implements import in instanceof interface let new of package private protected public return static super switch this throw try typeof var void while with yield true false null undefined type as readonly declare namespace abstract',
+  go: 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var true false nil iota',
+  py: 'and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield True False None self',
+  rs: 'as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while',
+  c: 'abstract auto bool break case catch char class const constexpr continue default delete do double else enum explicit extern false final finally float for friend func goto guard if import in inline instanceof int interface let long namespace new nil nullptr operator override package private protected public return short signed sizeof static struct super switch template this throw throws true try typedef typeof union unsigned using var virtual void volatile when while where fun val object',
+  sh: 'if then else elif fi for while do done case esac in function return exit local export readonly set unset source echo cd true false',
+  rb: 'alias and begin break case class def defined do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield require',
+};
+const FAM = { js: 'js', jsx: 'js', ts: 'js', tsx: 'js', mjs: 'js', cjs: 'js', vue: 'js', svelte: 'js', go: 'go', py: 'py', rs: 'rs',
+  c: 'c', h: 'c', cc: 'c', cpp: 'c', hpp: 'c', cs: 'c', java: 'c', kt: 'c', swift: 'c', m: 'c', mm: 'c', dart: 'c', scala: 'c', php: 'c',
+  sh: 'sh', bash: 'sh', zsh: 'sh', fish: 'sh', rb: 'rb', json: 'json', yml: 'yaml', yaml: 'yaml', toml: 'yaml', css: 'css', scss: 'css', html: 'html', xml: 'html', lua: 'lua', sql: 'sql' };
+const KWSET = {}; for (const k in KW) KWSET[k] = new Set(KW[k].split(' '));
+KWSET.json = new Set(['true', 'false', 'null']);
+const COMMENT = { js: '//', go: '//', rs: '//', c: '//', css: '', py: '#', sh: '#', rb: '#', yaml: '#', lua: '--', sql: '--', json: '', html: '' };
+function famOf(p) {
+  const base = p.split('/').pop();
+  if (/^(Dockerfile|Makefile)$/.test(base)) return 'sh';
+  const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+  return FAM[ext] || null;
+}
+const reCache = {};
+function lineRe(fam) {
+  if (reCache[fam]) return reCache[fam];
+  const cm = COMMENT[fam];
+  const parts = [];
+  if (fam === 'html') parts.push('(<!--.*?(?:-->|$))');
+  else if (cm) parts.push('(' + (fam === 'c' || fam === 'js' || fam === 'go' || fam === 'rs' ? '/\\*.*?(?:\\*/|$)|^\\s*\\*(?!\\w*=).*$|' : '') + cm.replace(/[/#*]/g, '\\$&') + '.*$)');
+  else if (fam === 'css') parts.push('(/\\*.*?(?:\\*/|$)|^\\s*\\*.*$)');
+  else parts.push('(?!)()');
+  if (parts[0].startsWith('(?!)')) parts[0] = '(?!x)x()'; // never matches, keeps group indices stable
+  const bt = fam === 'js' || fam === 'go' ? '|`(?:\\\\.|[^`\\\\])*`?' : '';
+  parts.push('("(?:\\\\.|[^"\\\\])*"?' + bt + "|'(?:\\\\.|[^'\\\\])*')");
+  parts.push('(\\b0x[0-9a-fA-F_]+\\b|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)');
+  parts.push('([A-Za-z_$][\\w$-]*)');
+  return (reCache[fam] = new RegExp(parts.join('|'), 'g'));
+}
+function highlight(src, fam) {
+  if (!fam || src.length > 600) return [{ t: src, c: '' }];
+  const re = lineRe(fam), kws = KWSET[fam] || new Set(), out = [];
+  let last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(src))) {
+    if (m[0] === '') { re.lastIndex++; continue; }
+    if (m.index > last) out.push({ t: src.slice(last, m.index), c: '' });
+    let c = '';
+    if (m[1]) c = 'cm'; else if (m[2]) c = 'st'; else if (m[3]) c = 'nu';
+    else if (m[4]) {
+      const w = m[4];
+      if (kws.has(w)) c = 'k';
+      else if (src[re.lastIndex] === '(' && !/^[A-Z]/.test(w) && fam !== 'css' && fam !== 'html') c = 'fn';
+      else if (/^[A-Z][a-z]/.test(w) && fam !== 'sh' && fam !== 'yaml') c = 'ty';
+    }
+    out.push({ t: m[0], c });
+    last = re.lastIndex;
+  }
+  if (last < src.length) out.push({ t: src.slice(last), c: '' });
+  return out;
+}
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// segments + changed ranges → html
+function paint(src, fam, ranges) {
+  const segs = highlight(src, fam);
+  if (!ranges || !ranges.length) return segs.map((s) => s.c ? `<span class="${s.c}">${esc(s.t)}</span>` : esc(s.t)).join('');
+  let html = '', pos = 0, ri = 0;
+  for (const s of segs) {
+    let a = pos; const end = pos + s.t.length; let buf = '';
+    while (a < end) {
+      while (ri < ranges.length && ranges[ri][1] <= a) ri++;
+      const r = ranges[ri];
+      if (!r || r[0] >= end) { buf += esc(s.t.slice(a - pos)); a = end; }
+      else if (r[0] > a) { buf += esc(s.t.slice(a - pos, r[0] - pos)); a = r[0]; }
+      else { const b = Math.min(r[1], end); buf += `<mark>${esc(s.t.slice(a - pos, b - pos))}</mark>`; a = b; }
+    }
+    html += s.c ? `<span class="${s.c}">${buf}</span>` : buf;
+    pos = end;
+  }
+  return html;
+}
+
+/* ───────────── intra-line word diff ───────────── */
+function wordDiff(a, b) {
+  if (a.length > 500 || b.length > 500) return null;
+  const tok = (s) => s.match(/\w+|\s+|[^\w\s]/g) || [];
+  const A = tok(a), B = tok(b);
+  if (A.length * B.length > 40000) return null;
+  const dp = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1));
+  for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--)
+    dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const ra = [], rb = []; let i = 0, j = 0, pa = 0, pb = 0, same = 0;
+  const push = (arr, s, e) => { if (e <= s) return; const l = arr[arr.length - 1]; if (l && l[1] === s) l[1] = e; else arr.push([s, e]); };
+  while (i < A.length || j < B.length) {
+    if (i < A.length && j < B.length && A[i] === B[j]) { if (/\S/.test(A[i])) same += 1; pa += A[i].length; pb += B[j].length; i++; j++; }
+    else if (j < B.length && (i === A.length || dp[i][j + 1] >= dp[i + 1][j])) { push(rb, pb, pb + B[j].length); pb += B[j].length; j++; }
+    else { push(ra, pa, pa + A[i].length); pa += A[i].length; i++; }
+  }
+  const total = Math.max(A.filter((t) => /\S/.test(t)).length, B.filter((t) => /\S/.test(t)).length);
+  if (total && same / total < 0.34) return null; // too different: marking everything is just noise
+  return [ra, rb];
+}
+function annotate(hunk) {
+  const ls = hunk.lines;
+  for (let i = 0; i < ls.length;) {
+    if (ls[i].t !== 'del') { i++; continue; }
+    let d = i; while (d < ls.length && ls[d].t === 'del') d++;
+    let a = d; while (a < ls.length && ls[a].t === 'add') a++;
+    const n = Math.min(d - i, a - d);
+    for (let k = 0; k < n; k++) { const r = wordDiff(ls[i + k].s, ls[d + k].s); if (r) { ls[i + k].rg = r[0]; ls[d + k].rg = r[1]; } }
+    i = a;
+  }
+}
+
+/* ───────────── rendering ───────────── */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const KEY = 'ldiff:' + (DATA ? DATA.title : '');
+const groups = DATA ? parseDiff(DATA.diff) : [];
+const files = groups.flatMap((g) => g.files);
+files.forEach((f, i) => { f.id = i; f.fam = famOf(f.path || ''); f.rows = f.hunks.reduce((n, h) => n + h.lines.length, 0); f.hunks.forEach(annotate); });
+const totals = files.reduce((t, f) => (t.a += f.adds, t.d += f.dels, t), { a: 0, d: 0 });
+let mode = new URLSearchParams(location.search).get('view') || store.get('ldiff:mode', 'unified');
+let viewed = new Set(store.get(KEY + ':viewed', []));
+const loaded = new Set();
+const BIG = 1500;
+
+const splitPath = (p) => { const i = p.lastIndexOf('/'); return [i < 0 ? '' : p.slice(0, i + 1), p.slice(i + 1)]; };
+const sg = (x) => x.t === 'add' ? '+' : x.t === 'del' ? '−' : '';
+
+function unifiedTable(f) {
+  let h = `<table class="d u"><colgroup><col class="n"><col class="n"><col></colgroup>`;
+  f.hunks.forEach((hk) => {
+    h += hunkRow(hk, 3, 2);
+    hk.lines.forEach((x) => {
+      if (x.t === 'meta') { h += `<tr class="nonl"><td class="ln"></td><td class="ln"></td><td class="c">${esc(x.s)}</td></tr>`; return; }
+      const idO = x.o != null ? ` id="f${f.id}-L${x.o}"` : '';
+      const id = x.t === 'del' ? idO : ` id="f${f.id}-R${x.n}"`;
+      h += `<tr class="${x.t}"${id}><td class="ln" data-a="L${x.o ?? ''}" data-ln="${x.o ?? ''}">${x.o ?? ''}</td><td class="ln" data-ln="${x.n ?? ''}" data-a="R${x.n ?? ''}">${x.n ?? ''}</td><td class="c"><span class="sg">${sg(x)}</span>${paint(x.s, f.fam, x.rg)}</td></tr>`;
+    });
+  });
+  return h + '</table>';
+}
+function hunkRow(hk, span, lnSpan) {
+  const rg = `−${hk.oStart},${hk.oLen} +${hk.nStart},${hk.nLen}`;
+  const lns = lnSpan === 2 ? '<td class="ln" colspan="2">⋯</td>' : '<td class="ln">⋯</td>';
+  return `<tr class="hunk">${lns}<td class="c" colspan="${span - lnSpan}"><span class="rg">${rg}</span><span class="cx">${esc(hk.ctx || '')}</span></td></tr>`;
+}
+function splitTable(f) {
+  let h = `<table class="d s"><colgroup><col class="n"><col><col class="n"><col></colgroup>`;
+  const cell = (x, side) => {
+    if (!x) return `<td class="ln void"></td><td class="c void"></td>`;
+    const num = side === 'L' ? x.o : x.n;
+    return `<td class="ln ${x.t}" data-a="${side}${num}" data-ln="${num}">${num}</td><td class="c ${x.t}"><span class="sg">${sg(x)}</span>${paint(x.s, f.fam, x.rg)}</td>`;
+  };
+  f.hunks.forEach((hk) => {
+    h += `<tr class="hunk"><td class="ln">⋯</td><td class="c" colspan="3"><span class="rg">−${hk.oStart},${hk.oLen} +${hk.nStart},${hk.nLen}</span><span class="cx">${esc(hk.ctx || '')}</span></td></tr>`;
+    const ls = hk.lines;
+    for (let i = 0; i < ls.length;) {
+      const x = ls[i];
+      if (x.t === 'meta') { h += `<tr class="nonl"><td class="ln"></td><td class="c" colspan="3">${esc(x.s)}</td></tr>`; i++; continue; }
+      if (x.t === 'ctx') { h += `<tr id="f${f.id}-R${x.n}">${cell(x, 'L')}${cell(x, 'R')}</tr>`; i++; continue; }
+      let d = i; while (d < ls.length && ls[d].t === 'del') d++;
+      let a = d; while (a < ls.length && ls[a].t === 'add') a++;
+      const dels = ls.slice(i, d), adds = ls.slice(d, a), n = Math.max(dels.length, adds.length);
+      for (let k = 0; k < n; k++) {
+        const r = adds[k], l = dels[k];
+        h += `<tr${r ? ` id="f${f.id}-R${r.n}"` : l ? ` id="f${f.id}-L${l.o}"` : ''}>${cell(l, 'L')}${cell(r, 'R')}</tr>`;
+      }
+      i = a || d || i + 1;
+      if (a === d && d === i) i++;
+    }
+  });
+  return h + '</table>';
+}
+function bodyHtml(f) {
+  if (f.raw) return `<pre class="raw">${esc(f.raw.join('\n'))}</pre>`;
+  if (f.binary) return `<div class="note">Binary file — nothing to show.</div>`;
+  if (!f.hunks.length) return `<div class="note">${f.status === 'renamed' ? 'Renamed without content changes.' : 'No content changes (mode or metadata only).'}</div>`;
+  if (f.rows > BIG && !loaded.has(f.id)) return `<div class="note">Large diff — ${f.rows.toLocaleString()} lines.<br><button data-load="${f.id}">Load diff</button></div>`;
+  return mode === 'split' ? splitTable(f) : unifiedTable(f);
+}
+function fileHtml(f) {
+  const [dir, base] = splitPath(f.path);
+  const tag = f.status === 'added' ? '<span class="tag added">new</span>' : f.status === 'deleted' ? '<span class="tag deleted">deleted</span>' : f.status === 'renamed' ? '<span class="tag">renamed</span>' : '';
+  const from = f.status === 'renamed' && f.a !== f.b ? `<span class="dir">${esc(f.a)}</span><span class="arrow">→</span>` : '';
+  const isV = viewed.has(f.id);
+  return `<section class="file${isV ? ' closed' : ''}" id="file-${f.id}" data-id="${f.id}">
+    <header class="fhead">
+      <button class="chev" aria-label="Collapse file" data-toggle="${f.id}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button>
+      <div class="fpath" title="${esc(f.path)}">${from}<span class="dir">${esc(dir)}</span><b>${esc(base)}</b></div>${tag}
+      <div class="fstat"><span class="a">+${f.adds}</span><span class="d">−${f.dels}</span>
+      <label class="viewed-l"><input type="checkbox" data-viewed="${f.id}" ${isV ? 'checked' : ''}>Viewed</label></div>
+    </header>
+    <div class="fbody">${f.notes.length ? `<div class="modes">${esc(f.notes.join('  ·  '))}</div>` : ''}${bodyHtml(f)}</div>
+  </section>`;
+}
+function commitHtml(c) {
+  const sub = c.msg[0] || '(no message)';
+  const body = c.msg.slice(1).join('\n').trim();
+  const bits = [];
+  if (c.author) bits.push(`<span><b>${esc(c.author.replace(/\s*<.*>/, ''))}</b></span>`);
+  if (c.date) bits.push(`<span>${esc(c.date)}</span>`);
+  bits.push(`<span class="sha">${esc(c.sha.slice(0, 10))}</span>`);
+  if (c.refs) bits.push(`<span>${esc(c.refs)}</span>`);
+  if (c.merge) bits.push(`<span>merge of ${esc(c.merge)}</span>`);
+  return `<div class="commit"><h2>${esc(sub)}</h2>${body ? `<p class="body">${esc(body)}</p>` : ''}<div class="meta">${bits.join('')}</div></div>`;
+}
+function stripHtml() {
+  return `<div class="strip" aria-hidden="true">` + files.map((f) => {
+    const t = f.adds + f.dels || 1, p = Math.round((f.adds / t) * 100);
+    return `<a href="#file-${f.id}" data-strip="${f.id}" class="${viewed.has(f.id) ? 'viewed' : ''}" style="flex:${Math.sqrt(t).toFixed(2)};background:linear-gradient(90deg,var(--add-ink) ${p}%,var(--del-ink) ${p}%)" title="${esc(f.path)}  +${f.adds} −${f.dels}"></a>`;
+  }).join('') + `</div>`;
+}
+function pips(f) {
+  const t = f.adds + f.dels; let a = t ? Math.round((f.adds / t) * 5) : 0; if (f.adds && !a) a = 1; if (f.dels && a === 5) a = 4;
+  return `<span class="pips">` + [0, 1, 2, 3, 4].map((i) => `<i class="${i < a ? 'a' : i < 5 && t && (i - a) < 5 ? 'd' : ''}"></i>`).join('') + `</span>`;
+}
+function sideHtml() {
+  return `<aside class="side"><input class="filter" id="filter" placeholder="Filter files" autocomplete="off" aria-label="Filter files">
+    <ul class="files" id="files">${files.map((f) => {
+      const [dir, base] = splitPath(f.path);
+      return `<li data-id="${f.id}" class="${viewed.has(f.id) ? 'viewed' : ''}"><a href="#file-${f.id}" data-nav="${f.id}"><span class="dot ${f.status}"></span><span class="nm" title="${esc(f.path)}"><span><span class="dir">${esc(dir)}</span><span class="base">${esc(base)}</span></span></span>${pips(f)}</a></li>`;
+    }).join('')}</ul>
+    <div class="prog"><span id="prog"></span><span class="keys"><kbd>j</kbd> <kbd>k</kbd> <kbd>s</kbd> <kbd>v</kbd></span></div></aside>`;
+}
+function render() {
+  document.title = 'ldiff · ' + (DATA ? DATA.title : '');
+  const app = $('#app');
+  const cmd = DATA ? DATA.title : '';
+  const top = `<div class="top"><div class="brand">l<i>d</i><u>iff</u></div><div class="cmd" title="${esc(cmd)}"><b>$</b> ${esc(cmd)}</div>
+    <div class="tot"><span class="f">${files.length} file${files.length === 1 ? '' : 's'}</span><span class="a">+${totals.a}</span><span class="d">−${totals.d}</span></div>
+    <div class="seg" role="group" aria-label="Diff layout"><button data-mode="unified" aria-pressed="${mode === 'unified'}">Unified</button><button data-mode="split" aria-pressed="${mode === 'split'}">Split</button></div></div>`;
+  if (!files.length) {
+    app.innerHTML = top + `<main class="shell" style="grid-template-columns:1fr"><div class="empty"><h2>No file changes found</h2><p>The input has no unified diff hunks. Try <code>git show</code>, <code>git diff</code> or <code>git log -p</code>. Raw input:</p><pre class="raw">${esc(DATA ? DATA.diff : '')}</pre></div></main>`;
+    return;
+  }
+  let main = stripHtml();
+  groups.forEach((g) => { if (g.commit) main += commitHtml(g.commit); main += g.files.map(fileHtml).join(''); });
+  app.innerHTML = top + `<div class="shell">${sideHtml()}<main id="main">${main}</main></div>`;
+  updateProgress();
+}
+function updateProgress() {
+  const p = $('#prog'); if (p) p.textContent = `${viewed.size} of ${files.length} viewed`;
+}
+function rerenderFile(id) {
+  const el = $('#file-' + id), f = files[id];
+  const tmp = document.createElement('div'); tmp.innerHTML = fileHtml(f); el.replaceWith(tmp.firstElementChild);
+}
+function setViewed(id, on) {
+  on ? viewed.add(id) : viewed.delete(id);
+  store.set(KEY + ':viewed', [...viewed]);
+  $('#file-' + id).classList.toggle('closed', on);
+  const cb = $(`[data-viewed="${id}"]`); if (cb) cb.checked = on;
+  $(`#files li[data-id="${id}"]`).classList.toggle('viewed', on);
+  $(`[data-strip="${id}"]`).classList.toggle('viewed', on);
+  updateProgress();
+}
+
+/* ───────────── interaction ───────────── */
+let cur = 0;
+function fileTops() { return files.map((f) => $('#file-' + f.id).getBoundingClientRect().top); }
+function syncCurrent() {
+  const tops = fileTops(); let c = 0;
+  tops.forEach((t, i) => { if (t <= 140) c = i; });
+  if (c === cur && $('#files a.cur')) return;
+  cur = c; $$('#files a.cur').forEach((a) => a.classList.remove('cur'));
+  const a = $(`#files a[data-nav="${c}"]`); if (a) { a.classList.add('cur'); a.scrollIntoView({ block: 'nearest' }); }
+}
+function go(i) {
+  i = Math.max(0, Math.min(files.length - 1, i));
+  $('#file-' + i).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const m = t.closest('[data-mode]');
+  if (m) { mode = m.dataset.mode; store.set('ldiff:mode', mode); $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode)); files.forEach((f) => { $('#file-' + f.id + ' .fbody').innerHTML = (f.notes.length ? `<div class="modes">${esc(f.notes.join('  ·  '))}</div>` : '') + bodyHtml(f); }); return; }
+  const tg = t.closest('[data-toggle]');
+  if (tg) { $('#file-' + tg.dataset.toggle).classList.toggle('closed'); return; }
+  const ld = t.closest('[data-load]');
+  if (ld) { loaded.add(+ld.dataset.load); rerenderFile(+ld.dataset.load); return; }
+  const ln = t.closest('td.ln[data-a]');
+  if (ln && ln.dataset.ln) { const fid = ln.closest('.file').dataset.id; const id = `f${fid}-${ln.dataset.a}`; if (document.getElementById(id)) { history.replaceState(null, '', '#' + id); document.getElementById(id).scrollIntoView({ block: 'center' }); window.dispatchEvent(new HashChangeEvent('hashchange')); } return; }
+  const nav = t.closest('[data-nav],[data-strip]');
+  if (nav) { e.preventDefault(); go(+(nav.dataset.nav ?? nav.dataset.strip)); }
+});
+document.addEventListener('change', (e) => { const v = e.target.closest('[data-viewed]'); if (v) setViewed(+v.dataset.viewed, v.checked); });
+document.addEventListener('mousedown', (e) => {
+  const td = e.target.closest('table.s td'); if (!td) return;
+  const tbl = td.closest('table'); const idx = td.cellIndex;
+  tbl.classList.toggle('selL', idx >= 2); tbl.classList.toggle('selR', idx < 2);
+});
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'filter') return;
+  const q = e.target.value.toLowerCase();
+  $$('#files li').forEach((li) => { li.hidden = q && !files[+li.dataset.id].path.toLowerCase().includes(q); });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.id === 'filter') { if (e.key === 'Escape' || e.key === 'Enter') e.target.blur(); return; }
+  if (e.target.matches('input,textarea')) return;
+  if (e.key === 'j') go(cur + 1); else if (e.key === 'k') go(cur - 1 + ($('#file-' + cur).getBoundingClientRect().top < -40 ? 1 : 0));
+  else if (e.key === 's') $(`[data-mode="${mode === 'split' ? 'unified' : 'split'}"]`).click();
+  else if (e.key === 'v') setViewed(cur, !viewed.has(cur));
+  else if (e.key === '/') { e.preventDefault(); $('#filter').focus(); }
+});
+let ticking = false;
+window.addEventListener('scroll', () => { if (ticking || !files.length) return; ticking = true; requestAnimationFrame(() => { ticking = false; syncCurrent(); }); }, { passive: true });
+
+render();
+if (files.length) { syncCurrent(); if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView({ block: 'center' }); } }
+</script>
+</body>
+</html>

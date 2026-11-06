@@ -1,0 +1,26 @@
+{
+  "name": "@wateret/ldiff",
+  "version": "0.1.0",
+  "description": "Pipe any git diff / git show into a GitHub-style diff page hosted locally.",
+  "bin": {
+    "ldiff": "bin/ldiff"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "diff",
+    "git",
+    "code-review",
+    "cli"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

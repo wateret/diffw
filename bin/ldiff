@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+require('../src/cli').main().catch((e) => { console.error(`ldiff: ${e.message}`); process.exit(1); });
