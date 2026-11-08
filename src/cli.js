@@ -1,12 +1,12 @@
-// ldiff — run a diff-producing command (or read stdin) and review it as a GitHub-style diff in the browser.
-//   ldiff git show HEAD      ldiff git diff main...      git diff | ldiff
+// dw — run a diff-producing command (or read stdin) and review it as a GitHub-style diff in the browser.
+//   dw git show HEAD      dw git diff main...      git diff | dw
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 
-const USAGE = `usage: ldiff [options] <command...>
-       <command> | ldiff [options]
+const USAGE = `usage: dw [options] <command...>
+       <command> | dw [options]
 
 options:
   -p, --port <list>  ports to try in order, e.g. 7700,7800-7810 (default: random free port)
@@ -14,9 +14,9 @@ options:
   -h, --help       show this help
 
 examples:
-  ldiff git show HEAD
-  ldiff git diff main...feature
-  git diff --staged | ldiff`;
+  dw git show HEAD
+  dw git diff main...feature
+  git diff --staged | dw`;
 
 function parseArgs(argv) {
   const opts = { ports: [0], open: false, cmd: [] };
@@ -34,7 +34,7 @@ function parsePorts(spec = '') {
   const ports = [];
   for (const part of spec.split(',')) {
     const m = /^\s*(\d+)(?:\s*-\s*(\d+))?\s*$/.exec(part);
-    if (!m) { console.error(`ldiff: invalid port list '${spec}'`); process.exit(2); }
+    if (!m) { console.error(`dw: invalid port list '${spec}'`); process.exit(2); }
     for (let p = +m[1]; p <= +(m[2] || m[1]); p++) ports.push(p);
   }
   return ports;
@@ -69,10 +69,10 @@ async function getInput(cmd) {
     stdio: ['inherit', 'pipe', 'inherit'],
     env: { ...process.env, GIT_PAGER: 'cat', NO_COLOR: '1' },
   });
-  child.on('error', (e) => { console.error(`ldiff: ${e.message}`); process.exit(127); });
+  child.on('error', (e) => { console.error(`dw: ${e.message}`); process.exit(127); });
   const out = await readStream(child.stdout);
   const code = await new Promise((r) => child.on('close', r));
-  if (code) console.error(`ldiff: '${cmd.join(' ')}' exited with ${code}`);
+  if (code) console.error(`dw: '${cmd.join(' ')}' exited with ${code}`);
   return out;
 }
 
@@ -86,7 +86,7 @@ function openBrowser(url) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const diff = await getInput(opts.cmd);
-  if (!diff.trim()) { console.error('ldiff: no diff output'); process.exit(1); }
+  if (!diff.trim()) { console.error('dw: no diff output'); process.exit(1); }
 
   const template = fs.readFileSync(path.join(__dirname, 'viewer.html'), 'utf8');
   const title = opts.cmd.length ? opts.cmd.join(' ') : 'stdin';
@@ -101,7 +101,7 @@ async function main() {
   const port = await listenOnFirstFree(server, opts.ports);
   const url = `http://127.0.0.1:${port}/`;
   console.log(url);
-  console.error('ldiff: hosting this diff — Ctrl-C to stop');
+  console.error('dw: hosting this diff — Ctrl-C to stop');
   if (opts.open) openBrowser(url);
 }
 

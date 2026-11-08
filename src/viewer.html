@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ldiff</title>
+<title>dw</title>
+<script>try{var t=new URLSearchParams(location.search).get('theme')||localStorage.getItem('dw:theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <style>
 :root {
   --bg: #eceff3; --surface: #ffffff; --surface-2: #f6f8fa; --ink: #1b2330; --muted: #657084; --faint: #98a2b3;
@@ -18,7 +19,7 @@
   --head-h: 64px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #101319; --surface: #171b23; --surface-2: #1c212b; --ink: #e5e9f0; --muted: #98a2b3; --faint: #5d6778;
     --line: #2a313d; --line-soft: #222834; --accent: #8e9aff; --accent-soft: #23294d;
     --add-bg: #12301f; --add-gut: #17402a; --add-word: #1f6a41; --add-ink: #4cd08a;
@@ -26,6 +27,14 @@
     --ctx-gut: #1c212b; --hunk-bg: #1d2238; --hunk-ink: #93a0ec; --focus: #4a4217;
     --s-kw: #c4a2ff; --s-str: #f0b36a; --s-num: #5ccbe0; --s-com: #6f7a8d; --s-fn: #8fb0ff; --s-type: #ee9be0;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #101319; --surface: #171b23; --surface-2: #1c212b; --ink: #e5e9f0; --muted: #98a2b3; --faint: #5d6778;
+    --line: #2a313d; --line-soft: #222834; --accent: #8e9aff; --accent-soft: #23294d;
+    --add-bg: #12301f; --add-gut: #17402a; --add-word: #1f6a41; --add-ink: #4cd08a;
+    --del-bg: #371a1c; --del-gut: #4a2124; --del-word: #7a2f33; --del-ink: #ff857b;
+    --ctx-gut: #1c212b; --hunk-bg: #1d2238; --hunk-ink: #93a0ec; --focus: #4a4217;
+    --s-kw: #c4a2ff; --s-str: #f0b36a; --s-num: #5ccbe0; --s-com: #6f7a8d; --s-fn: #8fb0ff; --s-type: #ee9be0;
 }
 * { box-sizing: border-box; }
 html { scroll-padding-top: calc(var(--head-h) + 56px); }
@@ -46,10 +55,12 @@ button { cursor: pointer; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .seg button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; color: var(--muted); }
 .seg button + button { border-left: 1px solid var(--line); }
+.theme { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 32px; height: 30px; display: grid; place-items: center; color: var(--muted); padding: 0; }
+.theme:hover { color: var(--ink); border-color: var(--faint); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 
 /* layout */
-.shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 28px; max-width: 1760px; margin: 0 auto; padding: 24px 24px 120px; align-items: start; }
+.shell { display: grid; grid-template-columns: clamp(280px, 15vw, 440px) minmax(0, 1fr); gap: 28px; padding: 24px 24px 120px; align-items: start; }
 .side { position: sticky; top: calc(var(--head-h) + 24px); max-height: calc(100vh - var(--head-h) - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .filter { border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 12px 14px; outline: none; font-size: 13px; }
 .filter:focus-visible { box-shadow: inset 0 -2px 0 var(--accent); }
@@ -336,12 +347,12 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-const KEY = 'ldiff:' + (DATA ? DATA.title : '');
+const KEY = 'dw:' + (DATA ? DATA.title : '');
 const groups = DATA ? parseDiff(DATA.diff) : [];
 const files = groups.flatMap((g) => g.files);
 files.forEach((f, i) => { f.id = i; f.fam = famOf(f.path || ''); f.rows = f.hunks.reduce((n, h) => n + h.lines.length, 0); f.hunks.forEach(annotate); });
 const totals = files.reduce((t, f) => (t.a += f.adds, t.d += f.dels, t), { a: 0, d: 0 });
-let mode = new URLSearchParams(location.search).get('view') || store.get('ldiff:mode', 'unified');
+let mode = new URLSearchParams(location.search).get('view') || store.get('dw:mode', 'unified');
 let viewed = new Set(store.get(KEY + ':viewed', []));
 const loaded = new Set();
 const BIG = 1500;
@@ -446,12 +457,13 @@ function sideHtml() {
     <div class="prog"><span id="prog"></span><span class="keys"><kbd>j</kbd> <kbd>k</kbd> <kbd>s</kbd> <kbd>v</kbd></span></div></aside>`;
 }
 function render() {
-  document.title = 'ldiff · ' + (DATA ? DATA.title : '');
+  document.title = 'dw · ' + (DATA ? DATA.title : '');
   const app = $('#app');
   const cmd = DATA ? DATA.title : '';
-  const top = `<div class="top"><div class="brand">l<i>d</i><u>iff</u></div><div class="cmd" title="${esc(cmd)}"><b>$</b> ${esc(cmd)}</div>
+  const top = `<div class="top"><div class="brand"><i>d</i><u>w</u></div><div class="cmd" title="${esc(cmd)}"><b>$</b> ${esc(cmd)}</div>
     <div class="tot"><span class="f">${files.length} file${files.length === 1 ? '' : 's'}</span><span class="a">+${totals.a}</span><span class="d">−${totals.d}</span></div>
-    <div class="seg" role="group" aria-label="Diff layout"><button data-mode="unified" aria-pressed="${mode === 'unified'}">Unified</button><button data-mode="split" aria-pressed="${mode === 'split'}">Split</button></div></div>`;
+    <div class="seg" role="group" aria-label="Diff layout"><button data-mode="unified" aria-pressed="${mode === 'unified'}">Unified</button><button data-mode="split" aria-pressed="${mode === 'split'}">Split</button></div>
+    <button class="theme" id="theme" aria-label="Switch light/dark theme" title="Switch light/dark theme"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg></button></div>`;
   if (!files.length) {
     app.innerHTML = top + `<main class="shell" style="grid-template-columns:1fr"><div class="empty"><h2>No file changes found</h2><p>The input has no unified diff hunks. Try <code>git show</code>, <code>git diff</code> or <code>git log -p</code>. Raw input:</p><pre class="raw">${esc(DATA ? DATA.diff : '')}</pre></div></main>`;
     return;
@@ -494,8 +506,12 @@ function go(i) {
 }
 document.addEventListener('click', (e) => {
   const t = e.target;
+  if (t.closest('#theme')) {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark'; store.set('dw:theme', dark ? 'light' : 'dark'); return;
+  }
   const m = t.closest('[data-mode]');
-  if (m) { mode = m.dataset.mode; store.set('ldiff:mode', mode); $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode)); files.forEach((f) => { $('#file-' + f.id + ' .fbody').innerHTML = (f.notes.length ? `<div class="modes">${esc(f.notes.join('  ·  '))}</div>` : '') + bodyHtml(f); }); return; }
+  if (m) { mode = m.dataset.mode; store.set('dw:mode', mode); $$('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode)); files.forEach((f) => { $('#file-' + f.id + ' .fbody').innerHTML = (f.notes.length ? `<div class="modes">${esc(f.notes.join('  ·  '))}</div>` : '') + bodyHtml(f); }); return; }
   const tg = t.closest('[data-toggle]');
   if (tg) { $('#file-' + tg.dataset.toggle).classList.toggle('closed'); return; }
   const ld = t.closest('[data-load]');
