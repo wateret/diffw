@@ -10,9 +10,9 @@ http://127.0.0.1:53211/
 ## Install
 
 ```sh
-npm install -g diffw     # from the registry
-npm install -g .                  # from a checkout
-npm link                          # from a checkout, for development
+git clone git@github.com:wateret/diffw.git
+cd diffw
+npm link                          # links `dw` to this checkout; `git pull` to update
 ```
 
 Requires Node 18+. No dependencies.
