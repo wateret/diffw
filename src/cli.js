@@ -40,12 +40,17 @@ function parsePorts(spec = '') {
   return ports;
 }
 
+// Over SSH the browser is on another machine, so listen on all interfaces and
+// print the address of this server (3rd field of SSH_CONNECTION) instead of 127.0.0.1.
+const sshHost = (process.env.SSH_CONNECTION || '').split(' ')[2] || null;
+const bindHost = sshHost ? '0.0.0.0' : '127.0.0.1';
+
 function listenOnFirstFree(server, ports) {
   return new Promise((resolve, reject) => {
     const tryNext = (i) => {
       if (i >= ports.length) return reject(new Error(`no free port in: ${ports.join(', ')}`));
       server.once('error', (e) => (e.code === 'EADDRINUSE' || e.code === 'EACCES') ? tryNext(i + 1) : reject(e));
-      server.listen(ports[i], '127.0.0.1', () => { server.removeAllListeners('error'); resolve(server.address().port); });
+      server.listen(ports[i], bindHost, () => { server.removeAllListeners('error'); resolve(server.address().port); });
     };
     tryNext(0);
   });
@@ -99,9 +104,10 @@ async function main() {
     res.end(html);
   });
   const port = await listenOnFirstFree(server, opts.ports);
-  const url = `http://127.0.0.1:${port}/`;
+  const url = `http://${sshHost && sshHost.includes(':') ? `[${sshHost}]` : sshHost || '127.0.0.1'}:${port}/`;
   console.log(url);
   console.error('dw: hosting this diff — Ctrl-C to stop');
+  if (sshHost) console.error('dw: SSH session detected — listening on all interfaces; anyone who can reach this address can view the diff');
   if (opts.open) openBrowser(url);
 }
 
