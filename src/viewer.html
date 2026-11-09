@@ -120,10 +120,10 @@ kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width
 table.d { width: 100%; border-collapse: collapse; table-layout: fixed; font: 12.5px/20px var(--mono); }
 table.u col.n { width: 54px; } table.s col.n { width: 54px; }
 table.d td { padding: 0; vertical-align: top; }
-td.ln { text-align: right; padding: 0 10px; color: var(--faint); background: var(--ctx-gut); user-select: none; cursor: pointer; font-size: 12px; }
+td.ln { text-align: right; padding: 0 10px; color: var(--faint); background: var(--ctx-gut); -webkit-user-select: none; user-select: none; cursor: pointer; font-size: 12px; }
 td.ln:hover { color: var(--accent); }
-td.c { padding: 0 12px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
-td.c .sg { display: inline-block; width: 1.4ch; margin-left: -1.4ch; color: var(--faint); user-select: none; }
+td.c { padding: 0 12px 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; -webkit-user-select: text; user-select: text; }
+td.c .sg { display: inline-block; width: 1.4ch; margin-left: -1.4ch; color: var(--faint); -webkit-user-select: none; user-select: none; }
 table.u td.c, table.s td.c { padding-left: calc(10px + 1.4ch); }
 tr.add td.c, td.c.add { background: var(--add-bg); } tr.add td.ln, td.ln.add { background: var(--add-gut); color: var(--add-ink); }
 tr.del td.c, td.c.del { background: var(--del-bg); } tr.del td.ln, td.ln.del { background: var(--del-gut); color: var(--del-ink); }
@@ -138,8 +138,7 @@ tr.hunk td.ln { cursor: default; text-align: center; letter-spacing: .1em; }
 tr.hunk .rg { font-weight: 600; margin-right: 12px; } tr.hunk .cx { opacity: .85; }
 tr.nonl td.c { color: var(--faint); font-style: italic; }
 tr:target td, tr:target td.ln { background: var(--focus) !important; }
-table.s.selL td:nth-child(4), table.s.selL td:nth-child(3) { user-select: none; }
-table.s.selR td:nth-child(2), table.s.selR td:nth-child(1) { user-select: none; }
+table.s.selL td:nth-child(4), table.s.selL td:nth-child(3), table.s.selR td:nth-child(2), table.s.selR td:nth-child(1) { -webkit-user-select: none; user-select: none; }
 .k { color: var(--s-kw); } .st { color: var(--s-str); } .nu { color: var(--s-num); } .cm { color: var(--s-com); font-style: italic; } .fn { color: var(--s-fn); } .ty { color: var(--s-type); }
 pre.raw { margin: 0; padding: 20px; overflow: auto; font: 12.5px/1.5 var(--mono); }
 .empty { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px; }
@@ -525,7 +524,7 @@ document.addEventListener('change', (e) => { const v = e.target.closest('[data-v
 document.addEventListener('mousedown', (e) => {
   const td = e.target.closest('table.s td'); if (!td) return;
   const tbl = td.closest('table'); const idx = td.cellIndex;
-  tbl.classList.toggle('selL', idx >= 2); tbl.classList.toggle('selR', idx < 2);
+  tbl.classList.toggle('selL', idx < 2); tbl.classList.toggle('selR', idx >= 2);
 });
 document.addEventListener('input', (e) => {
   if (e.target.id !== 'filter') return;
